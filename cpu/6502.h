@@ -2,8 +2,11 @@
 #define __6502_H__
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "../shared/utils.h"
+
+typedef struct cpu cpu; // forward declare cpu struct for circular reference on cpu_op
 
 typedef enum {
     NEXT_INSTRUCTION,
@@ -23,6 +26,7 @@ typedef struct {
     bool set;
     unsigned short addr;
     unsigned char data;
+    bool single_page;
 } cpu_bus_req;
 
 typedef struct {
@@ -33,9 +37,18 @@ typedef struct {
 } cpu_registers;
 
 typedef struct {
+    unsigned char cycles, length;
+    bool ready;
+    unsigned char data;
+    void (*call)(cpu*);
+    char lhs[4], rhs[8];
+} cpu_op;
+
+typedef struct cpu {
     // operation variables
     cpu_status status;
     cpu_bus_req bus_request;
+    cpu_op op;
     // data buffer to minimize bus requests
     unsigned char buffer[3];
     // registers

@@ -42,23 +42,106 @@ void op_dec(cpu* cpu) {}
 void op_inc(cpu* cpu) {}
 // ONE OFF OPS
 void op_brk(cpu* cpu) {}
-void op_bpl(cpu* cpu) {}
 void op_jsr(cpu* cpu) {}
-void op_bmi(cpu* cpu) {}
 void op_rti(cpu* cpu) {}
-void op_bvc(cpu* cpu) {}
 void op_rts(cpu* cpu) {}
-void op_bvs(cpu* cpu) {}
-void op_bcc(cpu* cpu) {}
-void op_bcs(cpu* cpu) {}
-void op_bne(cpu* cpu) {}
-void op_beq(cpu* cpu) {}
 void op_php(cpu* cpu) {}
-void op_clc(cpu* cpu) {}
 void op_plp(cpu* cpu) {}
 void op_pha(cpu* cpu) {}
-void op_cli(cpu* cpu) {}
 void op_pla(cpu* cpu) {}
+// TODO: branch needs to be fixed to be relative and work with signed values
+void op_bvs(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bvs");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_OVERFLOW);
+    if(flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc = cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bcc(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bcc");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_CARRY);
+    if(!flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc = cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bcs(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bcs");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_CARRY);
+    if(flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc = cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bne(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bne");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_ZERO);
+    if(!flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc = cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_beq(cpu* cpu) {
+    strcpy(cpu->op.lhs, "beq");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_ZERO);
+    if(flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc = cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bvc(cpu* cpu) {}
+void op_bmi(cpu* cpu) {}
+void op_bpl(cpu* cpu) {}
+void op_clc(cpu* cpu) {
+    strcpy(cpu->op.lhs, "clc");
+    CLEAR_BIT(cpu->reg.status, FLAG_CARRY);
+    cpu->op.cycles = 2;
+    cpu->op.length = 1;
+}
+void op_cld(cpu* cpu) {
+    strcpy(cpu->op.lhs, "cld");
+    CLEAR_BIT(cpu->reg.status, FLAG_DECIMAL);
+    cpu->op.cycles = 2;
+    cpu->op.length = 1;
+}
+void op_cli(cpu* cpu) {
+    strcpy(cpu->op.lhs, "cli");
+    CLEAR_BIT(cpu->reg.status, FLAG_INTERRUPT);
+    cpu->op.cycles = 2;
+    cpu->op.length = 1;
+}
+void op_clv(cpu* cpu) {
+    strcpy(cpu->op.lhs, "clv");
+    CLEAR_BIT(cpu->reg.status, FLAG_OVERFLOW);
+    cpu->op.cycles = 2;
+    cpu->op.length = 1;
+}
 void op_sec(cpu* cpu) {
     strcpy(cpu->op.lhs, "sec");
     SET_BIT(cpu->reg.status, FLAG_CARRY);
@@ -80,9 +163,7 @@ void op_sed(cpu* cpu) {
 void op_dey(cpu* cpu) {}
 void op_tya(cpu* cpu) {}
 void op_tay(cpu* cpu) {}
-void op_clv(cpu* cpu) {}
 void op_iny(cpu* cpu) {}
-void op_cld(cpu* cpu) {}
 void op_inx(cpu* cpu) {}
 void op_txa(cpu* cpu) {}
 void op_txs(cpu* cpu) {}
@@ -96,6 +177,7 @@ void op_nop(cpu* cpu) {
 void op_lpy(cpu* cpu) {}
 // ILLEGAL OP
 void op_ill(cpu* cpu) {
+    sprintf(cpu->op.lhs, "%02x", cpu->buffer[0]);
     printf("illegal op: %02x\n", cpu->buffer[0]);
 }
 
@@ -117,14 +199,52 @@ void (*op[256])(cpu* cpu) = {
         op_cpx, op_sbc, op_ill, op_ill, op_cpx, op_sbc, op_inc, op_ill, op_inx, op_sbc, op_nop, op_ill, op_cpx, op_sbc, op_inc, op_ill,
         op_beq, op_sbc, op_ill, op_ill, op_ill, op_sbc, op_inc, op_ill, op_sed, op_sbc, op_ill, op_ill, op_ill, op_sbc, op_inc, op_ill,
 };
+
+typedef enum {
+    AM_A,
+    AM_ABS,
+    AM_ABSX,
+    AM_ABSY,
+    AM_IMM,
+    AM_IMP,
+    AM_IND,
+    AM_INDX,
+    AM_INDY,
+    AM_REL,
+    AM_ZPG,
+    AM_ZPGX,
+    AM_ZPGY,
+    AM_NIL
+} cpu_addr_mode;
+
+cpu_addr_mode op_addr[256] = {
+//      00      01       02      03      04       05       06       07      08      09       0a      0b      0c       0d       0e       0f
+        AM_IMP, AM_INDX, AM_NIL, AM_NIL, AM_NIL,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_A,   AM_NIL, AM_NIL,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+        AM_ABS, AM_INDX, AM_NIL, AM_NIL, AM_ZPG,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_A,   AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+        AM_IMP, AM_INDX, AM_NIL, AM_NIL, AM_NIL,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_A,   AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+        AM_IMP, AM_INDX, AM_NIL, AM_NIL, AM_NIL,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_A,   AM_NIL, AM_IND,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+        AM_NIL, AM_INDX, AM_NIL, AM_NIL, AM_ZPG,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_IMP, AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_ZPGX, AM_ZPGX, AM_ZPGY, AM_NIL, AM_IMP, AM_ABSY, AM_IMP, AM_NIL, AM_NIL,  AM_ABSX, AM_NIL,  AM_NIL,
+        AM_IMM, AM_INDX, AM_IMM, AM_NIL, AM_ZPG,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_IMP, AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_ZPGX, AM_ZPGX, AM_ZPGY, AM_NIL, AM_IMP, AM_ABSY, AM_IMP, AM_NIL, AM_ABSX, AM_ABSX, AM_ABSY, AM_NIL,
+        AM_IMM, AM_INDX, AM_NIL, AM_NIL, AM_ZPG,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_IMP, AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+        AM_IMM, AM_INDX, AM_NIL, AM_NIL, AM_ZPG,  AM_ZPG,  AM_ZPG,  AM_NIL, AM_IMP, AM_IMM,  AM_IMP, AM_NIL, AM_ABS,  AM_ABS,  AM_ABS,  AM_NIL,
+        AM_REL, AM_INDY, AM_NIL, AM_NIL, AM_NIL,  AM_ZPGX, AM_ZPGX, AM_NIL, AM_IMP, AM_ABSY, AM_NIL, AM_NIL, AM_NIL,  AM_ABSX, AM_ABSX, AM_NIL,
+};
 /*
  * End of 6502_ops
  */
 
-void cpu_bus_read(cpu* cpu, unsigned short addr) {
+void cpu_bus_read(cpu* cpu, unsigned short addr, bool direct) {
     cpu->status = BUS_REQUEST;
     cpu->bus_request.type = READ;
     cpu->bus_request.addr = addr;
+    cpu->bus_request.direct = direct;
 }
 
 void cpu_bus_write(cpu* cpu, unsigned short addr, unsigned char data) {
@@ -141,37 +261,84 @@ void cpu_reset_bus(cpu* cpu) {
     cpu->bus_request.data = 0x00;
     cpu->bus_request.set = false;
     cpu->bus_request.single_page = true;
+    cpu->bus_request.direct = true;
 }
 
 // TODO: convert this to using a map
 unsigned char cpu_decode_op(cpu* cpu) {
-    unsigned char op_set = cpu->buffer[0] & (unsigned char)0x03;
-    unsigned char addr_mode = (cpu->buffer[0] >> 2) & (unsigned char)0x07;
-    unsigned char op_code = (cpu->buffer[0] >> 5) & (unsigned char)0x07;
-
     cpu->op.call = op[cpu->buffer[0]];
 
-    switch(addr_mode) {
-        case 0x00: //
-            cpu_bus_read(cpu, cpu->buffer[1] + cpu->reg.x);
-            break;
-        case 0x01:
-            break;
-        case 0x02:
+    switch(op_addr[cpu->buffer[0]]) {
+        case AM_A: {
+            cpu->op.data = cpu->reg.a;
+            cpu->op.ready = true;
+            strcpy(cpu->op.rhs, "A");
+        } break;
+        case AM_ABS: {
+            unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
+            cpu_bus_read(cpu, addr, true);
+            sprintf(cpu->op.rhs, "$%04x", addr);
+        } break;
+        case AM_ABSX: {
+            unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
+            cpu_bus_read(cpu, addr + cpu->reg.x, true);
+            sprintf(cpu->op.rhs, "$%04x,X", addr);
+        } break;
+        case AM_ABSY: {
+            unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
+            cpu_bus_read(cpu, addr + cpu->reg.y, true);
+            sprintf(cpu->op.rhs, "$%04x,Y", addr);
+        } break;
+        case AM_IMM: {
             cpu->op.data = cpu->buffer[1];
             cpu->op.ready = true;
             sprintf(cpu->op.rhs, "#$%02x", cpu->op.data);
-            break;
-        case 0x03:
-            break;
-        case 0x04:
-            break;
-        case 0x05:
-            break;
-        case 0x06:
-            break;
-        case 0x07:
-            break;
+        } break;
+        case AM_IMP: {
+            cpu->op.ready = true;
+            strcpy(cpu->op.rhs, "");
+        } break;
+        case AM_IND: {
+            unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
+            cpu_bus_read(cpu, addr, false);
+            sprintf(cpu->op.rhs, "($%04x)", addr);
+        } break;
+        // these might be wrong
+        case AM_INDX: {
+            unsigned short addr = cpu->buffer[1] + cpu->reg.x; // Zero-page only w/o carry
+            cpu_bus_read(cpu, addr, false);
+            sprintf(cpu->op.rhs, "($%02x,X)", cpu->buffer[1]);
+        } break;
+        case AM_INDY: {
+            unsigned short addr = (unsigned short)cpu->buffer[1] + cpu->reg.y; // Zero-page only, w/ carry
+            cpu_bus_read(cpu, addr, false);
+            sprintf(cpu->op.rhs, "($%02x),Y", cpu->buffer[1]);
+        } break;
+        // research them
+        case AM_REL: {
+            cpu->op.data = cpu->buffer[1];
+            cpu->op.ready = true;
+            sprintf(cpu->op.rhs, "$%02x", cpu->op.data);
+        } break;
+        case AM_ZPG: {
+            unsigned short addr = cpu->buffer[1];
+            cpu_bus_read(cpu, addr, true);
+            sprintf(cpu->op.rhs, "$%02x", cpu->buffer[1]);
+        } break;
+        case AM_ZPGX: {
+            unsigned short addr = cpu->buffer[1] + cpu->reg.x;
+            cpu_bus_read(cpu, addr, true);
+            sprintf(cpu->op.rhs, "$%02x,X", cpu->buffer[1]);
+        } break;
+        case AM_ZPGY: {
+            unsigned short addr = cpu->buffer[1] + cpu->reg.y;
+            cpu_bus_read(cpu, addr, true);
+            sprintf(cpu->op.rhs, "$%02x,Y", cpu->buffer[1]);
+        } break;
+        case AM_NIL: {
+            cpu->op.ready = true;
+            strcpy(cpu->op.rhs, "???");
+        } break;
     }
 
     return 0;

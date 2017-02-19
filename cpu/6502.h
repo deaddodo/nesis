@@ -27,6 +27,7 @@ typedef struct {
     unsigned short addr;
     unsigned char data;
     bool single_page;
+    bool direct;
 } cpu_bus_req;
 
 typedef struct {

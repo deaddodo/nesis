@@ -54,10 +54,12 @@ int main(int argc, char* argv[]) {
                     // Did the CPU make a bus request? Execute that.
                     if(cpu.status == BUS_REQUEST) {
                         if(cpu.bus_request.type == READ) {
-                            cpu.bus_request.data = read_byte(&memory, cpu.bus_request.addr);
+                            cpu.op.data = read_byte(&memory, cpu.bus_request.addr);
+                            cpu.op.ready = true;
                             cpu.bus_request.set = true;
                         } else if (cpu.bus_request.type == WRITE) {
                             write_byte(&memory, cpu.bus_request.addr, cpu.bus_request.data);
+                            cpu.op.ready = true;
                             cpu.bus_request.set = true;
                         }
                     } else {

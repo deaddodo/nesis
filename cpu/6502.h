@@ -9,7 +9,7 @@
 typedef struct cpu cpu; // forward declare cpu struct for circular reference on cpu_op
 
 typedef enum {
-    NEXT_INSTRUCTION,
+    NEXT_INSTRUCTION = 0,
     BUS_REQUEST,
     HALT,
     STOPPED

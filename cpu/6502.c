@@ -8,8 +8,6 @@
 void op_bit(cpu* cpu) {}
 void op_jmp(cpu* cpu) {}
 void op_jmpa(cpu* cpu) {}
-void op_sty(cpu* cpu) {}
-void op_ldy(cpu* cpu) {}
 void op_cpy(cpu* cpu) {}
 void op_cpx(cpu* cpu) {}
 void op_ora(cpu* cpu) {}
@@ -24,11 +22,46 @@ void op_adc(cpu* cpu) {
     }
     cpu->reg.pc += 2;
 }
-void op_sta(cpu* cpu) {}
-void op_lda(cpu* cpu) {
-    strcpy(cpu->op.lhs, "lda");
+// store operations
+void _op_store(cpu* cpu, const char* lhs, unsigned char* target) {
+    strcpy(cpu->op.lhs, lhs);
+    cpu->reg.pc += 2;
+    *target = cpu->op.data;
+}
+void op_sta(cpu* cpu) {
+    strcpy(cpu->op.lhs, "sta");
+    cpu->reg.pc += 2;
     cpu->reg.a = cpu->op.data;
-    cpu->op.length = 2;
+}
+void op_sty(cpu* cpu) {
+    strcpy(cpu->op.lhs, "stx");
+    cpu->reg.pc += 2;
+    cpu->reg.x = cpu->op.data;
+}
+void op_stx(cpu* cpu) {
+    strcpy(cpu->op.lhs, "sty");
+    cpu->reg.pc += 2;
+    cpu->reg.y = cpu->op.data;
+}
+// load operations
+void _op_load(cpu* cpu, const char* lhs, unsigned char* target) {
+    strcpy(cpu->op.lhs, lhs);
+
+    // set flags
+    ((signed char)cpu->op.data < 0) ? (SET_BIT(cpu->status, FLAG_NEGATIVE)) : (CLEAR_BIT(cpu->status, FLAG_NEGATIVE));
+    (cpu->op.data == 0) ? (SET_BIT(cpu->status, FLAG_ZERO)) : ((CLEAR_BIT(cpu->status, FLAG_ZERO)));
+
+    *target = cpu->op.data;
+    cpu->reg.pc += 2;
+}
+void op_lda(cpu* cpu) {
+    _op_load(cpu, "lda", &cpu->reg.a);
+}
+void op_ldx(cpu* cpu) {
+    _op_load(cpu, "ldx", &cpu->reg.x);
+}
+void op_ldy(cpu* cpu) {
+    _op_load(cpu, "ldy", &cpu->reg.y);
 }
 void op_cmp(cpu* cpu) {}
 void op_sbc(cpu* cpu) {}
@@ -36,8 +69,6 @@ void op_asl(cpu* cpu) {}
 void op_rol(cpu* cpu) {}
 void op_lsr(cpu* cpu) {}
 void op_ror(cpu* cpu) {}
-void op_stx(cpu* cpu) {}
-void op_ldx(cpu* cpu) {}
 void op_dec(cpu* cpu) {}
 void op_inc(cpu* cpu) {}
 // ONE OFF OPS
@@ -55,8 +86,7 @@ void op_bvs(cpu* cpu) {
     bool flag = GET_BIT(cpu->reg.status, FLAG_OVERFLOW);
     if(flag) {
         unsigned short addr = cpu->reg.pc;
-        cpu->reg.pc = cpu->op.data;
-        cpu->op.length = 0;
+        cpu->reg.pc += (signed char)cpu->op.data;
         cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
     } else {
         cpu->op.length = 2;
@@ -68,8 +98,7 @@ void op_bcc(cpu* cpu) {
     bool flag = GET_BIT(cpu->reg.status, FLAG_CARRY);
     if(!flag) {
         unsigned short addr = cpu->reg.pc;
-        cpu->reg.pc = cpu->op.data;
-        cpu->op.length = 0;
+        cpu->reg.pc += (signed char)cpu->op.data;
         cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
     } else {
         cpu->op.length = 2;
@@ -81,7 +110,7 @@ void op_bcs(cpu* cpu) {
     bool flag = GET_BIT(cpu->reg.status, FLAG_CARRY);
     if(flag) {
         unsigned short addr = cpu->reg.pc;
-        cpu->reg.pc = cpu->op.data;
+        cpu->reg.pc += (signed char)cpu->op.data;
         cpu->op.length = 0;
         cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
     } else {
@@ -94,7 +123,7 @@ void op_bne(cpu* cpu) {
     bool flag = GET_BIT(cpu->reg.status, FLAG_ZERO);
     if(!flag) {
         unsigned short addr = cpu->reg.pc;
-        cpu->reg.pc = cpu->op.data;
+        cpu->reg.pc += (signed char)cpu->op.data;
         cpu->op.length = 0;
         cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
     } else {
@@ -107,7 +136,7 @@ void op_beq(cpu* cpu) {
     bool flag = GET_BIT(cpu->reg.status, FLAG_ZERO);
     if(flag) {
         unsigned short addr = cpu->reg.pc;
-        cpu->reg.pc = cpu->op.data;
+        cpu->reg.pc += (signed char)cpu->op.data;
         cpu->op.length = 0;
         cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
     } else {
@@ -115,9 +144,45 @@ void op_beq(cpu* cpu) {
         cpu->op.cycles = 2;
     }
 }
-void op_bvc(cpu* cpu) {}
-void op_bmi(cpu* cpu) {}
-void op_bpl(cpu* cpu) {}
+void op_bvc(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bvc");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_OVERFLOW);
+    if(!flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc += (signed char)cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bmi(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bmi");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_NEGATIVE);
+    if(flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc += (signed char)cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
+void op_bpl(cpu* cpu) {
+    strcpy(cpu->op.lhs, "bvc");
+    bool flag = GET_BIT(cpu->reg.status, FLAG_NEGATIVE);
+    if(!flag) {
+        unsigned short addr = cpu->reg.pc;
+        cpu->reg.pc += (signed char)cpu->op.data;
+        cpu->op.length = 0;
+        cpu->op.cycles = ((addr & 0xF0) == (cpu->reg.pc & 0xF0)) ? 3 : 2;
+    } else {
+        cpu->op.length = 2;
+        cpu->op.cycles = 2;
+    }
+}
 void op_clc(cpu* cpu) {
     strcpy(cpu->op.lhs, "clc");
     CLEAR_BIT(cpu->reg.status, FLAG_CARRY);
@@ -264,7 +329,6 @@ void cpu_reset_bus(cpu* cpu) {
     cpu->bus_request.direct = true;
 }
 
-// TODO: convert this to using a map
 unsigned char cpu_decode_op(cpu* cpu) {
     cpu->op.call = op[cpu->buffer[0]];
 
@@ -278,16 +342,19 @@ unsigned char cpu_decode_op(cpu* cpu) {
             unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
             cpu_bus_read(cpu, addr, true);
             sprintf(cpu->op.rhs, "$%04x", addr);
+            cpu->reg.pc += 1;
         } break;
         case AM_ABSX: {
             unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
             cpu_bus_read(cpu, addr + cpu->reg.x, true);
             sprintf(cpu->op.rhs, "$%04x,X", addr);
+            cpu->reg.pc += 1;
         } break;
         case AM_ABSY: {
             unsigned short addr = LE_BYTE_TO_SHORT(cpu->buffer[1], cpu->buffer[2]);
             cpu_bus_read(cpu, addr + cpu->reg.y, true);
             sprintf(cpu->op.rhs, "$%04x,Y", addr);
+            cpu->reg.pc += 1;
         } break;
         case AM_IMM: {
             cpu->op.data = cpu->buffer[1];
@@ -351,6 +418,16 @@ unsigned char cpu_execute_op(cpu* cpu) {
     return SUCCESS;
 }
 
+void cpu_reset_op(cpu* cpu) {
+    cpu->op.call = 0;
+    cpu->op.cycles = 0;
+    cpu->op.length = 0;
+    cpu->op.data = 0x00;
+    cpu->op.ready = false;
+    strcpy(cpu->op.lhs, "");
+    strcpy(cpu->op.rhs, "");
+}
+
 void cpu_init(cpu* cpu) {
     cpu_reset_bus(cpu);
 
@@ -366,10 +443,14 @@ unsigned char cpu_tick(cpu* cpu) {
     printf("Buffer: %02x %02x %02x\n", cpu->buffer[0], cpu->buffer[1], cpu->buffer[2]);
     if(!cpu->op.ready) {
         cpu_decode_op(cpu);
-    } else {
-        cpu_execute_op(cpu);
     }
-    unsigned char status = cpu_execute_op(cpu);
+
+    if(cpu->op.ready){
+        cpu_execute_op(cpu);
+        printf("%s %s\n", cpu->op.lhs, cpu->op.rhs);
+        cpu_reset_op(cpu);
+        cpu_reset_bus(cpu);
+    }
     
-    return status;
+    return cpu->status;
 }

@@ -63,8 +63,13 @@ unsigned char read_byte(memory* memory, unsigned short addr) {
     unsigned char data;
 
     switch(addr) {
-        case 0x0000 ... 0x7fff: {
-            data = memory->iram[addr];
+        case 0x0000 ... 0x1fff: {
+            unsigned short real_addr = (unsigned short)(addr & 0x07ff);
+            data = memory->iram[real_addr];
+        } break;
+        case 0x2000 ... 0x2007: {
+            data = 0xff;
+            printf("PPU read...unimplemented\n");
         } break;
         case 0x8000 ... 0xbfff: { // banked rom
             unsigned int rom_addr = (unsigned int)((addr - 0x8000) + (16384 * memory->bank));

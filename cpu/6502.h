@@ -31,7 +31,7 @@ typedef struct {
 } cpu_bus_req;
 
 typedef struct {
-    unsigned short sp;
+    unsigned char sp;
     unsigned short pc;
     unsigned char a, x, y;
     unsigned char status;
